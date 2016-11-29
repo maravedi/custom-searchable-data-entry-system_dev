@@ -1417,11 +1417,17 @@ add_action('admin_menu','ghazale_sds_options_page_admin_menu');
 function ghazale_sds_front_end_search_field($atts){
     $output = '<form id="sds-search-entries" method="post">';
     $output .= '<h3>'. __('Search','custom-searchable-data-entry-system') .':</h3>';
-    $output .= '<p><input type="text" name="sds-search-data" size="40" placeholder="'.__('First or Last Name','custom-searchable-data-entry-system').'"></p>';
-    $output .= '<p><input type="text" name="sds-search-id" size="40" placeholder="'.__('ID Number','custom-searchable-data-entry-system').'"></p>';
+    $output .= '<p><input required type="text" name="sds-search-data" size="40" placeholder="'.__('First or Last Name','custom-searchable-data-entry-system').'"></p>';
+    $output .= '<p><input required type="text" name="sds-search-id" size="40" placeholder="'.__('ID Number','custom-searchable-data-entry-system').'"></p>';
     $output .= '<p><input type="submit" name="submit-sds-search-query" value="'.__('Search','custom-searchable-data-entry-system').'"></p>';
     $output .= '</form>';
-    if(isset($_POST['submit-sds-search-query'])){
+    $search_query = sanitize_text_field( $_POST['submit-sds-search-query'] );
+    update_post_meta( $post->ID, 'submit-sds-search-query', $search_query );
+    $search_data = sanitize_text_field( $_POST['sds-search-data'] );
+    update_post_meta( $post->ID, 'sds-search-data', $search_data );
+    $search_id = sanitize_text_field( $_POST['sds-search-id'] );
+    update_post_meta( $post->ID, 'sds-search-id', $search_id );
+    if(isset($_POST['sds-search-data'])){
         global $wpdb;
         $tables = $wpdb-> prefix. "ghazale_sds_";
         $input_tables = $wpdb->get_results("SHOW TABLES LIKE "."'" .$tables."%_inputs'",ARRAY_A);
@@ -1441,8 +1447,8 @@ function ghazale_sds_front_end_search_field($atts){
                         $inputs_sql = "SELECT * FROM " . $table . " ORDER BY id ASC";
                         $inputs = $wpdb->get_results($inputs_sql, ARRAY_A);
 
-                        if (trim($_POST['sds-search-data'] != '')) {
-                            $results_sql = "SELECT id,field_id,field_input FROM " . $table . " WHERE field_input COLLATE UTF8_GENERAL_CI LIKE '" . $_POST['sds-search-data'] . "%' ORDER BY id ASC";
+                        if ((trim($_POST['sds-search-data'] != '')) && (trim($_POST['sds-search-id'] != ''))) {
+                            $results_sql = "SELECT id,field_id,field_input FROM " . $table . " WHERE field_input COLLATE UTF8_GENERAL_CI LIKE '%" . $_POST['sds-search-data'] . "%' ORDER BY id ASC";
                             $results = $wpdb->get_results($results_sql, ARRAY_A);
                             foreach ($field_tables as $field_table) {
                                 foreach ($field_table as $field_table_single) {
@@ -1462,10 +1468,9 @@ function ghazale_sds_front_end_search_field($atts){
                                             }
                                             if ($results) {
 
-                                                foreach ($results as $result) {
+                                                foreach ($results as $key => $result) {
                                                     if (strstr($result['field_input'], '@') != true) {
-                                                        $output .= "<div id=\"" . $table . "\">";
-                                                        $output .= "<table class = \"table\">";
+
                                                         $range_initial_sql = 'SELECT id FROM ' . $table . ' WHERE field_id<= ' . $result['field_id'] . ' AND field_id =' . $first_id . ' AND id<= ' . $result['id'] . ' ORDER BY id DESC LIMIT 1';
                                                         $range_initial = $wpdb->get_results($range_initial_sql, ARRAY_A);
                                                         $range_final_sql = 'SELECT id FROM ' . $table . ' WHERE field_id>= ' . $result['field_id'] . ' AND field_id =' . $last_id . ' AND id>= ' . $result['id'] . ' ORDER BY id ASC LIMIT 1';
@@ -1473,6 +1478,12 @@ function ghazale_sds_front_end_search_field($atts){
 
                                                         $result_range_sql = 'SELECT id,field_id,field_input FROM ' . $table . ' WHERE id BETWEEN ' . $range_initial[0]['id'] . ' and ' . $range_final[0]['id'];
                                                         $result_range = $wpdb->get_results($result_range_sql, ARRAY_A);
+                                                        sort($result_range);
+                                                        if (($result_range[2]['field_id'] == 3) && ($result_range[2]['field_input'] != $_POST['sds-search-id'])){
+                                                            // This result doesn't match the user input, so remove it from the result_range array.
+                                                            unset($result_range);
+                                                            continue;
+                                                        }
                                                         foreach ($fields as $field) {
                                                             if ($field['field_hide'] == "Hide") {
                                                                 //if the field is hidden don't show anything
@@ -1486,8 +1497,10 @@ function ghazale_sds_front_end_search_field($atts){
                                                             if (!in_array($single_result['field_id'], $hidden_field)) {
                                                                 array_push($results_array, $single_result['field_input']);
                                                             }
-                                                        }
 
+                                                        }
+                                                        $output .= "<div id=\"" . $table . "\">";
+                                                        $output .= "<table class = \"table\">";
                                                         $output .= "<tr>";
                                                         foreach ($shown_field as $index => $single_field) {
                                                             if ($results_array[$index] != "") {
